@@ -7,8 +7,8 @@ from typing import Any
 from skillproof.models import Question, SkillCandidate, ScoredAssessment
 from skillproof.report import evidence_status, gap_priority, gap_reason, learning_plan_rows
 
-GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
-GEMINI_MODEL = "gemini-3-pro-preview"
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+GEMINI_MODEL = "gemini-2.5-pro"
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "openrouter/auto"
 DEFAULT_ENDPOINT = GEMINI_ENDPOINT
