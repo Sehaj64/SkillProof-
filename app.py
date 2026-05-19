@@ -571,6 +571,19 @@ def render_ai_learning_plan(plans: list[dict]) -> None:
 
 ensure_state()
 
+with st.sidebar:
+    st.markdown("### 🤖 Engine Status")
+    api_key, _, model = gemini_ai_config()
+    if api_key:
+        st.success(f"● Gemini Active")
+        st.caption(f"Model: {model}")
+        st.info("The AI is dynamically analyzing your resume to generate unique questions.")
+    else:
+        st.warning("○ Static Fallback")
+        st.caption("No API Key detected.")
+        st.info("Add GEMINI_API_KEY to see the AI generate custom questions.")
+    st.markdown("---")
+
 st.markdown(
     """
     <div class="hero">
@@ -675,7 +688,7 @@ with tabs[1]:
 
 with tabs[3]:
     st.subheader("Gap Analysis")
-    scored = st.session_state.scored
+    scored = st.session_state.get("scored")
     if not scored:
         st.info("Extract skills in the Inputs tab to see the Gap Analysis.")
     else:
@@ -711,7 +724,7 @@ with tabs[3]:
 
 with tabs[4]:
     st.subheader("🛡️ Claim-to-Proof Ledger")
-    scored = st.session_state.scored
+    scored = st.session_state.get("scored")
     if not scored:
         st.info("Extract skills in the Inputs tab to see the Claim-to-Proof Ledger.")
     else:
@@ -742,7 +755,7 @@ with tabs[4]:
 
 with tabs[2]:
     st.subheader("Personalized Learning Plan")
-    scored = st.session_state.scored
+    scored = st.session_state.get("scored")
     if not scored:
         st.info("Extract skills in the Inputs tab to see the Learning Plan.")
     else:
@@ -940,7 +953,7 @@ with tabs[5]:
 
 with tabs[6]:
     st.subheader("Export")
-    scored = st.session_state.scored
+    scored = st.session_state.get("scored")
     if not scored:
         st.info("Score the assessment first.")
     else:
@@ -1013,7 +1026,7 @@ with tabs[6]:
 
 with tabs[7]:
     st.subheader("Executive Summary")
-    scored = st.session_state.scored
+    scored = st.session_state.get("scored")
     if not scored:
         st.info("Extract skills in the Inputs tab to see the Executive Summary.")
     else:
