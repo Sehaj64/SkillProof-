@@ -251,11 +251,14 @@ def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, li
 
     words = cleaned.split()
     reason_codes: list[str] = []
-    length_score = min(8, max(0, len(words) // 10))
+    # Length score: 6 words per point instead of 10. Max 8 points at 48 words.
+    length_score = min(8, max(0, len(words) // 6))
     signal_hits = sum(1 for signal in signals if signal.lower() in cleaned)
-    signal_score = min(18, signal_hits * 4)
-    specificity_score = min(8, len(SPECIFICITY_RE.findall(text)) * 4)
-    practical_score = 6 if any(
+    # Signal score: More reward for the first few signals
+    signal_score = min(20, signal_hits * 6)
+    specificity_score = min(10, len(SPECIFICITY_RE.findall(text)) * 5)
+    # Practical score: Increased from 6 to 10
+    practical_score = 10 if any(
         word in cleaned
         for word in (
             "analyzed",
@@ -278,11 +281,12 @@ def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, li
             "wrote",
         )
     ) else 0
+    # Context score: Increased max from 5 to 8
     context_hits = sum(1 for signal in CONTEXT_SIGNALS if signal in cleaned)
-    context_score = min(5, context_hits)
+    context_score = min(8, context_hits * 2)
     weak_penalty = 12 if any(phrase in cleaned for phrase in WEAK_PHRASES) else 0
     generic_penalty = 0
-    if len(words) >= 35 and signal_hits <= 1 and context_hits <= 1:
+    if len(words) >= 45 and signal_hits <= 1 and context_hits <= 1:
         generic_penalty = 8
     if any(phrase in cleaned for phrase in GENERIC_PHRASES):
         generic_penalty += 4
