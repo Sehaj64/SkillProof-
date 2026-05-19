@@ -251,13 +251,19 @@ def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, li
 
     words = cleaned.split()
     reason_codes: list[str] = []
-    # Length score: 6 words per point instead of 10. Max 8 points at 48 words.
-    length_score = min(8, max(0, len(words) // 6))
+    # Length score: Fair baseline for 30+ words. Max 8 points.
+    length_score = min(8, max(0, len(words) // 5))
     signal_hits = sum(1 for signal in signals if signal.lower() in cleaned)
-    # Signal score: More reward for the first few signals
-    signal_score = min(20, signal_hits * 6)
+    # Signal score: More flexible, rewards any 2 technical keywords significantly.
+    signal_score = min(20, signal_hits * 10)
+    # Technical depth bonus: If you use technical markers but miss exact signals
+    depth_hits = sum(1 for signal in DEPTH_SIGNALS if signal in cleaned)
+    if signal_hits == 0 and depth_hits >= 2:
+        signal_score = 12
+        reason_codes.append("uses_general_technical_language")
+
     specificity_score = min(10, len(SPECIFICITY_RE.findall(text)) * 5)
-    # Practical score: Increased from 6 to 10
+    # Practical score: High reward for action
     practical_score = 10 if any(
         word in cleaned
         for word in (
@@ -281,15 +287,14 @@ def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, li
             "wrote",
         )
     ) else 0
-    # Context score: Increased max from 5 to 8
+    # Context score: High reward for artifacts/processes
     context_hits = sum(1 for signal in CONTEXT_SIGNALS if signal in cleaned)
-    context_score = min(8, context_hits * 2)
+    context_score = min(10, context_hits * 3)
+    
     weak_penalty = 12 if any(phrase in cleaned for phrase in WEAK_PHRASES) else 0
     generic_penalty = 0
-    if len(words) >= 45 and signal_hits <= 1 and context_hits <= 1:
-        generic_penalty = 8
-    if any(phrase in cleaned for phrase in GENERIC_PHRASES):
-        generic_penalty += 4
+    if len(words) >= 50 and signal_hits <= 1 and context_hits <= 1:
+        generic_penalty = 10
 
     assessment = max(
         0,
@@ -305,52 +310,45 @@ def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, li
         ),
     )
 
-    depth_hits = sum(1 for signal in DEPTH_SIGNALS if signal in cleaned)
     depth = min(
-        20,
-        depth_hits * 3
-        + min(6, signal_hits * 2)
-        + (3 if "because" in cleaned else 0)
-        + (3 if practical_score else 0),
+        25, # Increased max depth from 20 to 25
+        depth_hits * 4
+        + min(8, signal_hits * 3)
+        + (4 if "because" in cleaned else 0)
+        + (4 if practical_score else 0),
     )
     confidence = min(
         10,
-        2
-        + min(4, signal_hits)
+        3 # Higher baseline confidence
+        + min(5, signal_hits * 2)
         + (2 if specificity_score else 0)
-        + (1 if practical_score else 0)
-        + (1 if context_hits >= 2 else 0)
-        - (4 if weak_penalty else 0)
-        - (2 if generic_penalty else 0),
+        + (2 if practical_score else 0)
+        - (6 if weak_penalty else 0),
     )
     confidence = max(0, confidence)
 
-    if signal_hits >= 2:
+    if signal_hits >= 1:
         reason_codes.append("uses_skill_specific_language")
-    elif signal_hits == 1:
-        reason_codes.append("uses_limited_skill_specific_language")
     if specificity_score:
         reason_codes.append("mentions_measurable_outcome")
     if practical_score:
         reason_codes.append("gives_practical_example")
     if context_hits >= 2:
         reason_codes.append("gives_contextual_detail")
-    if depth >= 8:
+    if depth >= 10:
         reason_codes.append("discusses_tradeoffs_or_failures")
     if weak_penalty:
         reason_codes.append("low_confidence_language")
-    if generic_penalty:
-        reason_codes.append("generic_answer_pattern")
 
     return assessment, depth, confidence, reason_codes
 
 
 def classify(score: int) -> str:
-    if score >= 85:
+    if score >= 80:
         return "Strong"
-    if score >= 70:
+    if score >= 65:
         return "Ready with checks"
-    if score >= 50:
+    if score >= 45:
         return "Developing"
     return "Gap"
 
