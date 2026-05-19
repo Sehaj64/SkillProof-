@@ -43,7 +43,7 @@ def call_gemini_native(api_key: str, system_message: str, user_prompt: str, hist
     body = {
         "system_instruction": {"parts": [{"text": system_message}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1500}
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1500}
     }
     
     url = f"{GEMINI_ENDPOINT}?key={api_key}"
@@ -66,7 +66,13 @@ def parse_json_object(text: str) -> dict[str, Any]:
     return {}
 
 def generate_assessment_question(skill: SkillCandidate, question: Question, api_key: str, endpoint: str, model: str, seniority: str = "Mid-Level", prior_turns: list[dict[str, str]] = None) -> dict[str, str]:
-    system = f"You are a Technical Interviewer. Your task is to verify a candidate's proficiency for a {seniority} role. Ask exactly ONE technical question to verify the candidate's claim. Adapting complexity to the {seniority} level. Return JSON: {{\"question\": \"...\", \"interviewer_intent\": \"...\"}}"
+    system = (
+        f"You are a Technical Interviewer for a {seniority} role. "
+        "STRICT RULE: Avoid repetitive patterns. Do NOT always start with 'Can you tell me...'. "
+        "VARY YOUR STYLE: Mix between scenario-based questions, troubleshooting challenges, and architectural tradeoffs. "
+        "Your goal is to verify technical claims with ONE deep-dive question. "
+        "Return JSON: {\"question\": \"...\", \"interviewer_intent\": \"...\"}"
+    )
     user = f"Seniority Level: {seniority}\nSkill: {skill.name}\nJD Mentions: {skill.jd_mentions[:2]}\nResume Claims: {skill.resume_evidence[:2]}"
     
     res = call_gemini_native(api_key, system, user, prior_turns)
@@ -74,7 +80,13 @@ def generate_assessment_question(skill: SkillCandidate, question: Question, api_
     return {"question": data.get("question", res), "interviewer_intent": data.get("interviewer_intent", f"Verify {seniority} level expertise")}
 
 def generate_adaptive_follow_up(skill: SkillCandidate, question: Question, displayed_question: str, answer_text: str, api_key: str, endpoint: str, model: str, seniority: str = "Mid-Level") -> dict[str, str]:
-    system = f"You are a Technical Interviewer. Audit the candidate's answer for a {seniority} role. If vague, ask for specific metrics or details. If strong, ask about a tradeoff or edge case. Return JSON: {{\"response_feedback\": \"...\", \"follow_up\": \"...\"}}"
+    system = (
+        f"You are a Senior Technical Architect auditing a candidate's answer for a {seniority} role. "
+        "STRICT RULE: Be direct and conversational. No generic fluff. "
+        "If the answer is vague: Challenge them on specific metrics or implementation steps. "
+        "If the answer is strong: Drill into a specific 'What if?' scenario, a tradeoff, or a failure state they encountered. "
+        "Return JSON: {\"response_feedback\": \"...\", \"follow_up\": \"...\"}"
+    )
     user = f"Role Seniority: {seniority}\nSkill: {skill.name}\nQuestion Asked: {displayed_question}\nAnswer: {answer_text}"
     
     res = call_gemini_native(api_key, system, user)
