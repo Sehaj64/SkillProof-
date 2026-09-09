@@ -7,8 +7,8 @@ from typing import Any
 from skillproof.models import Question, SkillCandidate, ScoredAssessment
 from skillproof.report import evidence_status, gap_priority, gap_reason, learning_plan_rows
 
-GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent"
-GEMINI_MODEL = "gemini-3.1-pro"
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_MODEL = "gemini-2.5-flash"
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "openrouter/auto"
 DEFAULT_ENDPOINT = GEMINI_ENDPOINT
@@ -29,7 +29,7 @@ def assessment_payload(scored: ScoredAssessment, learning_style: str, weekly_hou
         ]
     }
 
-def call_gemini_native(api_key: str, system_message: str, user_prompt: str, history: list[dict[str, str]] = None) -> str:
+def call_gemini_native(api_key: str, system_message: str, user_prompt: str, history: list[dict[str, str]] = None, model: str = None) -> str:
     # Convert history (role/content) to Gemini contents (role/parts)
     contents = []
     if history:
@@ -43,10 +43,11 @@ def call_gemini_native(api_key: str, system_message: str, user_prompt: str, hist
     body = {
         "system_instruction": {"parts": [{"text": system_message}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1500}
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}
     }
     
-    url = f"{GEMINI_ENDPOINT}?key={api_key}"
+    active_model = model or GEMINI_MODEL or "gemini-2.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{active_model}:generateContent?key={api_key}"
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     
     try:
@@ -75,7 +76,7 @@ def generate_assessment_question(skill: SkillCandidate, question: Question, api_
     )
     user = f"Seniority Level: {seniority}\nSkill: {skill.name}\nJD Mentions: {skill.jd_mentions[:2]}\nResume Claims: {skill.resume_evidence[:2]}"
     
-    res = call_gemini_native(api_key, system, user, prior_turns)
+    res = call_gemini_native(api_key, system, user, prior_turns, model=model)
     data = parse_json_object(res)
     return {"question": data.get("question", res), "interviewer_intent": data.get("interviewer_intent", f"Verify {seniority} level expertise")}
 
@@ -89,7 +90,7 @@ def generate_adaptive_follow_up(skill: SkillCandidate, question: Question, displ
     )
     user = f"Role Seniority: {seniority}\nSkill: {skill.name}\nQuestion Asked: {displayed_question}\nAnswer: {answer_text}"
     
-    res = call_gemini_native(api_key, system, user)
+    res = call_gemini_native(api_key, system, user, model=model)
     data = parse_json_object(res)
     return {"response_feedback": data.get("response_feedback", "Got it."), "follow_up": data.get("follow_up", res)}
 
@@ -104,7 +105,7 @@ def generate_personalized_learning_plan(scored: ScoredAssessment, learning_style
     )
     user = json.dumps(assessment_payload(scored, learning_style, weekly_hours))
     
-    res = call_gemini_native(api_key, system, user)
+    res = call_gemini_native(api_key, system, user, model=model)
     data = parse_json_object(res)
     plans = data.get("plans", [])
     for p in plans:
@@ -120,4 +121,32 @@ def generate_ai_review(scored: ScoredAssessment, learning_style: str, weekly_hou
         "Write 2 professional paragraphs."
     )
     user = json.dumps(assessment_payload(scored, learning_style, weekly_hours))
-    return call_gemini_native(api_key, system, user)
+    return call_gemini_native(api_key, system, user, model=model)
+
+def generate_ai_answer_audit(skill: SkillCandidate, question: Question, displayed_question: str, answer_text: str, api_key: str, endpoint: str, model: str, seniority: str = "Mid-Level") -> dict[str, Any]:
+    system = (
+        f"You are a Technical Subject Matter Expert auditing a {seniority} level candidate's answer for the skill '{skill.name}'.\n"
+        "Your task is to provide an objective technical score (0-100) based on accuracy, depth, and evidence.\n"
+        "SCORING CRITERIA:\n"
+        "1. ACCURACY (0-45): Is the technical explanation correct?\n"
+        "2. DEPTH (0-25): Does the candidate show senior-level reasoning (tradeoffs, constraints)?\n"
+        "3. CONFIDENCE (0-10): Is the answer concrete and evidence-backed?\n"
+        "Return JSON: {\"assessment_score\": int, \"depth_score\": int, \"confidence_score\": int, \"reason_codes\": [\"code1\", \"code2\"]}"
+    )
+    user = (
+        f"Skill: {skill.name}\n"
+        f"Context (JD): {skill.jd_mentions[:1]}\n"
+        f"Context (Resume): {skill.resume_evidence[:1]}\n"
+        f"Question Asked: {displayed_question}\n"
+        f"Candidate Answer: {answer_text}"
+    )
+    
+    res = call_gemini_native(api_key, system, user, model=model)
+    data = parse_json_object(res)
+    return {
+        "assessment_score": data.get("assessment_score", 0),
+        "depth_score": data.get("depth_score", 0),
+        "confidence_score": data.get("confidence_score", 0),
+        "reason_codes": data.get("reason_codes", ["ai_audit_complete"])
+    }
+

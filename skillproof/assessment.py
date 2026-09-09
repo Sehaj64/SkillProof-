@@ -244,10 +244,19 @@ def answer_reuse_count(text: str, answers: dict[str, str]) -> int:
     return sum(1 for answer in answers.values() if answer_signature(answer) == signature)
 
 
-def score_answer(text: str, signals: tuple[str, ...]) -> tuple[int, int, int, list[str]]:
+def score_answer(text: str, signals: tuple[str, ...], ai_scores: dict[str, Any] = None) -> tuple[int, int, int, list[str]]:
     cleaned = normalize(text)
     if not cleaned:
         return 0, 0, 0, ["no_answer"]
+
+    # If AI scores are provided, use them as they are much more professional and context-aware
+    if ai_scores:
+        return (
+            ai_scores.get("assessment_score", 0),
+            ai_scores.get("depth_score", 0),
+            ai_scores.get("confidence_score", 0),
+            ai_scores.get("reason_codes", ["ai_audit_complete"])
+        )
 
     words = cleaned.split()
     reason_codes: list[str] = []
@@ -377,7 +386,7 @@ def learning_plan(skill: SkillCandidate, level: str) -> str:
     )
 
 
-def score_skill(skill: SkillCandidate, answers: dict[str, str]) -> SkillResult:
+def score_skill(skill: SkillCandidate, answers: dict[str, str], ai_audit_results: dict[str, Any] = None) -> SkillResult:
     resume_score = evidence_quality(skill.resume_evidence)
     answer_scores: list[int] = []
     depth_scores: list[int] = []
@@ -389,7 +398,13 @@ def score_skill(skill: SkillCandidate, answers: dict[str, str]) -> SkillResult:
         answer_text = answers.get(key, "")
         follow_up_text = answers.get(follow_up_key(skill.name, question.prompt), "")
         combined_answer = "\n".join(part for part in (answer_text, follow_up_text) if part.strip())
-        assessment, depth, confidence, reasons = score_answer(combined_answer, question.signals)
+        
+        # Get AI audit for this specific answer if available
+        ai_scores = None
+        if ai_audit_results and key in ai_audit_results:
+            ai_scores = ai_audit_results[key]
+            
+        assessment, depth, confidence, reasons = score_answer(combined_answer, question.signals, ai_scores)
         if follow_up_text.strip():
             reasons.append("answered_adaptive_follow_up")
         if answer_reuse_count(combined_answer, answers) > 1:
@@ -455,8 +470,8 @@ def recommendation(overall: int, results: list[SkillResult]) -> str:
     return "Candidate needs foundation work before being considered ready for this JD. Follow the learning plan and reassess."
 
 
-def score_assessment(assessment: Assessment, answers: dict[str, str]) -> ScoredAssessment:
-    results = [score_skill(skill, answers) for skill in assessment.skills]
+def score_assessment(assessment: Assessment, answers: dict[str, str], ai_audit_results: dict[str, Any] = None) -> ScoredAssessment:
+    results = [score_skill(skill, answers, ai_audit_results) for skill in assessment.skills]
     if not results:
         return ScoredAssessment([], 0, "No relevant skills found. Recheck input quality.", [], [])
 
@@ -481,3 +496,4 @@ def score_assessment(assessment: Assessment, answers: dict[str, str]) -> ScoredA
         strongest_skills=strongest,
         highest_risks=risks[:5],
     )
+

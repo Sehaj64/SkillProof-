@@ -143,6 +143,7 @@ def ensure_state() -> None:
         "llm_question_notes": {},
         "ai_learning_plan": [],
         "ai_learning_plan_error": "",
+        "ai_audit_results": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -233,9 +234,40 @@ def analyze_inputs() -> None:
 
 
 def score_current_assessment() -> None:
+    api_key, endpoint, model = gemini_ai_config()
+    assessment = st.session_state.assessment
+    answers = st.session_state.answers
+
+    # If API key is available, run a 'Smart AI Audit' of the answers
+    if api_key and assessment and answers:
+        with st.spinner("🤖 Smart AI Audit: Calibrating technical accuracy..."):
+            for skill in assessment.skills:
+                for question in skill.questions:
+                    key = answer_key(skill.name, question.prompt)
+                    if key in answers and key not in st.session_state.ai_audit_results:
+                        try:
+                            # Get the displayed question text for context
+                            # (We use fallback here as it matches the base context)
+                            displayed = contextual_question_prompt(skill, question)
+                            
+                            audit = generate_ai_answer_audit(
+                                skill,
+                                question,
+                                displayed,
+                                answers[key],
+                                api_key,
+                                endpoint,
+                                model,
+                                assessment.seniority
+                            )
+                            st.session_state.ai_audit_results[key] = audit
+                        except Exception:
+                            pass # Fallback to heuristic scoring if AI fails
+
     st.session_state.scored = score_assessment(
         st.session_state.assessment,
         st.session_state.answers,
+        st.session_state.ai_audit_results
     )
     st.session_state.ai_review = ""
     st.session_state.ai_learning_plan = []
